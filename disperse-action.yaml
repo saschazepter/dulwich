@@ -1,0 +1,25 @@
+---
+name: disperse-action
+command: |-
+  test -f disperse.conf || exit 0
+  echo Use disperse action
+  echo
+  cat <<EOF >.github/workflows/disperse.yml
+  ---
+  name: Disperse configuration
+
+  "on":
+    - push
+
+  jobs:
+    build:
+
+      runs-on: ubuntu-latest
+
+      steps:
+        - uses: actions/checkout@v2
+        - uses: jelmer/action-disperse-validate@v1
+  EOF
+mode: propose
+merge-request:
+  commit-message: Use disperse action to validate

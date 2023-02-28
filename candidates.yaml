@@ -1,5 +1,8 @@
 - url: https://github.com/jelmer/silver-platter
 - url: https://github.com/jelmer/dulwich
+- url: https://github.com/jelmer/upstream-ontologist
+- url: https://github.com/jelmer/ognibuild
+- url: https://github.com/jelmer/buildlog-consultant
 - url: lp:brz
 - url: lp:brz/3.3
 - url: lp:brz-debian
@@ -19,3 +22,5 @@
 - url: https://salsa.debian.org/jelmer/lintian-brush
 - url: https://github.com/jelmer/janitor
 - url: lp:loggerhead
+- url: https://github.com/jelmer/ptabtools
+- url: https://github.com/jelmer/ctrlproxy

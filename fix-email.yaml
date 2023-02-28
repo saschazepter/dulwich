@@ -1,0 +1,7 @@
+---
+name: fix-email
+command: "sed -i 's/jelmer@nl.linux.org/jelmer@jelmer.uk/' -i 's/jelmer@samba.org/jelmer@jelmer.uk/' $(find . -name \"*.c\") $(find . -name \"*.py\") $(find . -name Makefile) $(find . -name README)"
+mode: propose
+merge-request:
+  commit-message: Fix my email address
+  description: Fix my email address
