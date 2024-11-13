@@ -1,0 +1,8 @@
+---
+name: disperse-migrate
+command: |-
+  disperse migrate
+mode: propose
+merge-request:
+  commit-message: Migrate disperse configuration to toml
+  auto-merge: true
