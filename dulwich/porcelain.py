@@ -729,7 +729,9 @@ def remove(repo=".", paths=None, cached=False) -> None:
 rm = remove
 
 
-def commit_decode(commit, contents, default_encoding=DEFAULT_ENCODING):
+def commit_decode(commit: Commit, contents: Optional[bytes], default_encoding: str = DEFAULT_ENCODING) -> str:
+    if contents is None:
+        return ""
     if commit.encoding:
         encoding = commit.encoding.decode("ascii")
     else:
@@ -737,7 +739,7 @@ def commit_decode(commit, contents, default_encoding=DEFAULT_ENCODING):
     return contents.decode(encoding, "replace")
 
 
-def commit_encode(commit, contents, default_encoding=DEFAULT_ENCODING):
+def commit_encode(commit: Commit, contents: str, default_encoding: str = DEFAULT_ENCODING) -> bytes:
     if commit.encoding:
         encoding = commit.encoding.decode("ascii")
     else:
@@ -745,7 +747,7 @@ def commit_encode(commit, contents, default_encoding=DEFAULT_ENCODING):
     return contents.encode(encoding)
 
 
-def print_commit(commit, decode, outstream=sys.stdout) -> None:
+def print_commit(commit: Commit, decode, outstream=sys.stdout) -> None:
     """Write a human-readable commit log entry.
 
     Args:
@@ -860,7 +862,7 @@ def show_object(repo, obj, decode, outstream):
     }[obj.type_name](repo, obj, decode, outstream)
 
 
-def print_name_status(changes):
+def print_name_status(changes, encoding: str = DEFAULT_ENCODING) -> None:
     """Print a simple status summary, listing changed files."""
     for change in changes:
         if not change:
@@ -869,15 +871,15 @@ def print_name_status(changes):
             change = change[0]
         if change.type == CHANGE_ADD:
             path1 = change.new.path
-            path2 = ""
+            path2 = b""
             kind = "A"
         elif change.type == CHANGE_DELETE:
             path1 = change.old.path
-            path2 = ""
+            path2 = b""
             kind = "D"
         elif change.type == CHANGE_MODIFY:
             path1 = change.new.path
-            path2 = ""
+            path2 = b""
             kind = "M"
         elif change.type in RENAME_CHANGE_TYPES:
             path1 = change.old.path
@@ -886,7 +888,7 @@ def print_name_status(changes):
                 kind = "R"
             elif change.type == CHANGE_COPY:
                 kind = "C"
-        yield "%-8s%-20s%-20s" % (kind, path1, path2)  # noqa: UP031
+        yield "%-8s%-20s%-20s" % (kind, path1.decode(encoding), path2.decode(encoding))  # noqa: UP031
 
 
 def log(
@@ -912,8 +914,21 @@ def log(
             include = [r.head()]
         except KeyError:
             include = []
+        if paths is None:
+            encoded_paths = None
+        else:
+            encoded_paths = []
+            for path in paths:
+                if isinstance(path, str):
+                    encoded_path = path.encode(DEFAULT_ENCODING)
+                elif isinstance(path, bytes):
+                    encoded_path = path
+                else:
+                    raise ValueError(f"Invalid path type: {type(path)}")
+                encoded_paths.append(encoded_path)
         walker = r.get_walker(
-            include=include, max_entries=max_entries, paths=paths, reverse=reverse
+            include=include, max_entries=max_entries, paths=encoded_paths,
+            reverse=reverse
         )
         for entry in walker:
 
