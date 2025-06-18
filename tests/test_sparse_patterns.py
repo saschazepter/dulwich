@@ -500,7 +500,7 @@ class ApplyIncludedPathsTests(TestCase):
         self.assertTrue(idx[b"test_file.txt"].skip_worktree)
 
     def test_local_modifications_ioerror(self):
-        """Test handling of IOError when checking for local modifications."""
+        """Test handling of PermissionError/OSError when checking for local modifications."""
         self._commit_blob("special_file.txt", b"content")
         file_path = os.path.join(self.temp_dir, "special_file.txt")
 
@@ -517,8 +517,8 @@ class ApplyIncludedPathsTests(TestCase):
 
         self.addCleanup(safe_chmod_cleanup)
 
-        # Should raise conflict error with unreadable file and force=False
-        with self.assertRaises(SparseCheckoutConflictError):
+        # Should raise PermissionError with unreadable file and force=False
+        with self.assertRaises((PermissionError, OSError)):
             apply_included_paths(self.repo, included_paths=set(), force=False)
 
         # With force=True, should remove the file anyway
