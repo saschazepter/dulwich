@@ -256,9 +256,7 @@ def garbage_collect(
     if progress:
         progress("Packing references")
     if not dry_run:
-        from dulwich.porcelain import pack_refs
-
-        pack_refs(repo)
+        repo.refs.pack_refs()
 
     # Delete loose unreachable objects
     if prune and not dry_run:
