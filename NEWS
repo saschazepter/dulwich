@@ -19,6 +19,11 @@
    available. The Rust implementation already raised the correct exception.
    (#1606, Jelmer Vernooĳ)
 
+ * Add progress reporting during pack downloads. Dulwich now shows real-time
+   progress updates when receiving pack data, similar to Git's "Receiving objects"
+   messages. This addresses the issue where Dulwich remained silent during large
+   repository clones. (#1121, Jelmer Vernooĳ)
+
 0.23.0	2025-06-21
 
  * Add basic ``rebase`` subcommand. (Jelmer Vernooĳ)

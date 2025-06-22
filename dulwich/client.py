@@ -960,15 +960,23 @@ class GitClient:
         if CAPABILITY_THIN_PACK in self._fetch_capabilities:
             from tempfile import SpooledTemporaryFile
 
+            from .progress import ProgressReporter, StreamingPackDataHandler
+
             f: IO[bytes] = SpooledTemporaryFile(
                 max_size=PACK_SPOOL_FILE_MAX_SIZE,
                 prefix="incoming-",
                 dir=getattr(target.object_store, "path", None),
             )
 
+            # Create progress reporter for streaming updates
+            progress_reporter = ProgressReporter(progress) if progress else None
+            pack_handler = StreamingPackDataHandler(f.write, progress_reporter)
+
             def commit() -> None:
                 if f.tell():
                     f.seek(0)
+                    if progress_reporter:
+                        progress_reporter.finish()
                     target.object_store.add_thin_pack(f.read, None, progress=progress)  # type: ignore
                 f.close()
 
@@ -977,12 +985,23 @@ class GitClient:
 
         else:
             f, commit, abort = target.object_store.add_pack()
+            # For non-thin packs, create progress handler
+            from .progress import ProgressReporter, StreamingPackDataHandler
+
+            progress_reporter = ProgressReporter(progress) if progress else None
+            pack_handler = StreamingPackDataHandler(f.write, progress_reporter)
         try:
+            # Use pack_handler.write for thin packs, f.write for regular packs
+            write_func = (
+                pack_handler.write
+                if CAPABILITY_THIN_PACK in self._fetch_capabilities
+                else f.write
+            )
             result = self.fetch_pack(
                 path,
                 determine_wants,
                 target.get_graph_walker(),
-                f.write,
+                write_func,
                 progress=progress,
                 depth=depth,
                 ref_prefix=ref_prefix,
@@ -993,6 +1012,11 @@ class GitClient:
             abort()
             raise
         else:
+            if (
+                progress_reporter
+                and CAPABILITY_THIN_PACK not in self._fetch_capabilities
+            ):
+                progress_reporter.finish()
             commit()
         target.update_shallow(result.new_shallow, result.new_unshallow)
         return result
