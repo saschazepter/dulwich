@@ -3119,7 +3119,7 @@ def cherry_pick(
       repo: Repository to cherry-pick into
       committish: Commit to cherry-pick
       no_commit: If True, do not create a commit after applying changes
-      continue\\_: Continue an in-progress cherry-pick after resolving conflicts
+      continue\_: Continue an in-progress cherry-pick after resolving conflicts
       abort: Abort an in-progress cherry-pick
 
     Returns:
@@ -3444,10 +3444,10 @@ def prune(
     progress=None,
 ):
     """Prune/clean up a repository's object store.
-    
+
     This removes temporary files that were left behind by interrupted
     pack operations.
-    
+
     Args:
       repo: Path to the repository or a Repo object
       grace_period: Grace period in seconds for removing temporary files
