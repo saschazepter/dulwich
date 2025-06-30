@@ -1640,7 +1640,23 @@ class TestPathPrefixCompression(TestCase):
 class TestUpdateWorkingTree(TestCase):
     def setUp(self):
         self.tempdir = tempfile.mkdtemp()
-        self.addCleanup(shutil.rmtree, self.tempdir)
+
+        def cleanup_tempdir():
+            """Remove tempdir, handling read-only files on Windows."""
+
+            def remove_readonly(func, path, excinfo):
+                """Error handler for Windows read-only files."""
+                import stat
+
+                if sys.platform == "win32" and excinfo[0] is PermissionError:
+                    os.chmod(path, stat.S_IWRITE)
+                    func(path)
+                else:
+                    raise
+
+            shutil.rmtree(self.tempdir, onerror=remove_readonly)
+
+        self.addCleanup(cleanup_tempdir)
 
         self.repo = Repo.init(self.tempdir)
 
