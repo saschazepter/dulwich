@@ -2338,9 +2338,53 @@ def branch_list(repo):
 
     Args:
       repo: Path to the repository
+    Returns:
+      List of branch names (without refs/heads/ prefix)
     """
     with open_repo_closing(repo) as r:
-        return r.refs.keys(base=LOCAL_BRANCH_PREFIX)
+        branches = list(r.refs.keys(base=LOCAL_BRANCH_PREFIX))
+
+        # Check for branch.sort configuration
+        config = r.get_config_stack()
+        try:
+            sort_key = config.get((b"branch",), b"sort").decode()
+        except KeyError:
+            # Default is refname (alphabetical)
+            sort_key = "refname"
+
+        # Parse sort key
+        reverse = False
+        if sort_key.startswith("-"):
+            reverse = True
+            sort_key = sort_key[1:]
+
+        # Apply sorting
+        if sort_key == "refname":
+            # Simple alphabetical sort (default)
+            branches.sort(reverse=reverse)
+        elif sort_key in ("committerdate", "authordate"):
+            # Sort by date
+            def get_commit_date(branch_name):
+                try:
+                    ref = LOCAL_BRANCH_PREFIX + branch_name
+                    sha = r.refs[ref]
+                    commit = r.object_store[sha]
+                    if sort_key == "committerdate":
+                        return commit.commit_time
+                    else:  # authordate
+                        return commit.author_time
+                except Exception:
+                    return 0  # Put broken refs at the beginning
+
+            # Sort branches by date
+            # Note: Python's sort naturally orders smaller values first (ascending)
+            # For dates, this means oldest first by default
+            branches.sort(key=get_commit_date, reverse=reverse)
+        else:
+            # Unknown sort key, fall back to default
+            branches.sort()
+
+        return branches
 
 
 def active_branch(repo):
