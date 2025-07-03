@@ -2379,7 +2379,12 @@ def branch_list(repo):
             # Sort branches by date
             # Note: Python's sort naturally orders smaller values first (ascending)
             # For dates, this means oldest first by default
-            branches.sort(key=get_commit_date, reverse=reverse)
+            # Use a stable sort with branch name as secondary key for consistent ordering
+            if reverse:
+                # For reverse sort, we want newest dates first but alphabetical names second
+                branches.sort(key=lambda b: (-get_commit_date(b), b))
+            else:
+                branches.sort(key=lambda b: (get_commit_date(b), b))
         else:
             # Unknown sort key, fall back to default
             branches.sort()
