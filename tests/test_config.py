@@ -851,6 +851,68 @@ class StackedConfigTests(TestCase):
             paths,
         )
 
+    def test_git_config_global(self) -> None:
+        with tempfile.NamedTemporaryFile(suffix=".gitconfig") as global_config:
+            # Write test config
+            global_config.write(b"[user]\n\tname = Test User\n")
+            global_config.flush()
+
+            self.overrideEnv("GIT_CONFIG_GLOBAL", global_config.name)
+            backends = StackedConfig.default_backends()
+
+            # Should have at least one backend (the global config)
+            self.assertGreater(len(backends), 0)
+
+            # Check that the custom global config is loaded
+            paths = [backend.path for backend in backends if hasattr(backend, "path")]
+            self.assertIn(
+                global_config.name.encode()
+                if isinstance(paths[0], bytes)
+                else global_config.name,
+                paths,
+            )
+
+    def test_git_config_system(self) -> None:
+        with tempfile.NamedTemporaryFile(suffix=".gitconfig") as system_config:
+            # Write test config
+            system_config.write(b"[core]\n\tautocrlf = true\n")
+            system_config.flush()
+
+            self.overrideEnv("GIT_CONFIG_SYSTEM", system_config.name)
+            self.overrideEnv("GIT_CONFIG_NOSYSTEM", None)  # Ensure it's not set
+            backends = StackedConfig.default_backends()
+
+            # Should have at least one backend (the system config)
+            self.assertGreater(len(backends), 0)
+
+            # Check that the custom system config is loaded
+            paths = [backend.path for backend in backends if hasattr(backend, "path")]
+            self.assertIn(
+                system_config.name.encode()
+                if isinstance(paths[0], bytes)
+                else system_config.name,
+                paths,
+            )
+
+    def test_git_config_nosystem_precedence(self) -> None:
+        # GIT_CONFIG_SYSTEM should take precedence over GIT_CONFIG_NOSYSTEM
+        with tempfile.NamedTemporaryFile(suffix=".gitconfig") as system_config:
+            system_config.write(b"[core]\n\ttest = value\n")
+            system_config.flush()
+
+            self.overrideEnv("GIT_CONFIG_SYSTEM", system_config.name)
+            self.overrideEnv("GIT_CONFIG_NOSYSTEM", "1")  # This should be ignored
+            backends = StackedConfig.default_backends()
+
+            # Check that the custom system config is still loaded
+            paths = [backend.path for backend in backends if hasattr(backend, "path")]
+            self.assertIn(
+                system_config.name.encode()
+                if isinstance(paths[0], bytes)
+                else system_config.name,
+                paths,
+            )
+
 
 class EscapeValueTests(TestCase):
     def test_nothing(self) -> None:
