@@ -38,7 +38,7 @@ import tempfile
 from pathlib import Path
 from typing import Callable, ClassVar, Optional, Union
 
-from dulwich import porcelain
+from dulwich import __version__, porcelain
 
 from .bundle import create_bundle_from_repo, read_bundle, write_bundle
 from .client import GitProtocolError, get_transport_and_path
@@ -416,6 +416,10 @@ def enable_pager():
 class Command:
     """A Dulwich subcommand."""
 
+    def __init__(self, git_dir=None, work_tree=None):
+        self.git_dir = git_dir
+        self.work_tree = work_tree
+
     def run(self, args) -> Optional[int]:
         """Run the command."""
         raise NotImplementedError(self.run)
@@ -759,31 +763,36 @@ class cmd_clone(Command):
             print(f"{e}")
 
 
-def _get_commit_message(repo, commit):
-    # Prepare a template
-    template = b"\n"
+def _get_commit_message_with_template(initial_message, repo=None, commit=None):
+    """Get commit message with an initial message template."""
+    # Start with the initial message
+    template = initial_message
+    if template and not template.endswith(b"\n"):
+        template += b"\n"
+
+    template += b"\n"
     template += b"# Please enter the commit message for your changes. Lines starting\n"
     template += b"# with '#' will be ignored, and an empty message aborts the commit.\n"
     template += b"#\n"
-    try:
-        ref_names, ref_sha = repo.refs.follow(b"HEAD")
-        ref_path = ref_names[-1]  # Get the final reference
-        if ref_path.startswith(b"refs/heads/"):
-            branch = ref_path[11:]  # Remove 'refs/heads/' prefix
-        else:
-            branch = ref_path
-        template += b"# On branch %s\n" % branch
-    except (KeyError, IndexError):
-        template += b"# On branch (unknown)\n"
-    template += b"#\n"
+
+    # Add branch info if repo is provided
+    if repo:
+        try:
+            ref_names, ref_sha = repo.refs.follow(b"HEAD")
+            ref_path = ref_names[-1]  # Get the final reference
+            if ref_path.startswith(b"refs/heads/"):
+                branch = ref_path[11:]  # Remove 'refs/heads/' prefix
+            else:
+                branch = ref_path
+            template += b"# On branch %s\n" % branch
+        except (KeyError, IndexError):
+            template += b"# On branch (unknown)\n"
+        template += b"#\n"
+
     template += b"# Changes to be committed:\n"
 
     # Launch editor
     content = launch_editor(template)
-
-    # Check if content was unchanged
-    if content == template:
-        raise CommitMessageError("Aborting commit due to unchanged commit message")
 
     # Remove comment lines and strip
     lines = content.split(b"\n")
@@ -806,17 +815,40 @@ class cmd_commit(Command):
             action="store_true",
             help="Automatically stage all tracked files that have been modified",
         )
+        parser.add_argument(
+            "--amend",
+            action="store_true",
+            help="Replace the tip of the current branch by creating a new commit",
+        )
         args = parser.parse_args(args)
 
         message: Union[bytes, str, Callable]
 
         if args.message:
             message = args.message
+        elif args.amend:
+            # For amend, create a callable that opens editor with original message pre-populated
+            def get_amend_message(repo, commit):
+                # Get the original commit message from current HEAD
+                try:
+                    head_commit = repo[repo.head()]
+                    original_message = head_commit.message
+                except KeyError:
+                    original_message = b""
+
+                # Open editor with original message
+                return _get_commit_message_with_template(original_message, repo, commit)
+
+            message = get_amend_message
         else:
-            message = _get_commit_message
+            # For regular commits, use empty template
+            def get_regular_message(repo, commit):
+                return _get_commit_message_with_template(b"", repo, commit)
+
+            message = get_regular_message
 
         try:
-            porcelain.commit(".", message=message, all=args.all)
+            porcelain.commit(".", message=message, all=args.all, amend=args.amend)
         except CommitMessageError as e:
             print(f"error: {e}", file=sys.stderr)
             return 1
@@ -2871,6 +2903,9 @@ def main(argv=None) -> Optional[int]:
     parser.add_argument("--no-pager", action="store_true", help="Disable pager")
     parser.add_argument("--pager", action="store_true", help="Force enable pager")
     parser.add_argument("--help", "-h", action="store_true", help="Show help")
+    parser.add_argument("--version", action="store_true", help="Show version")
+    parser.add_argument("--git-dir", help="Set the path to the repository")
+    parser.add_argument("--work-tree", help="Set the path to the working tree")
 
     # Parse known args to separate global options from command args
     global_args, remaining = parser.parse_known_args(argv)
@@ -2881,6 +2916,16 @@ def main(argv=None) -> Optional[int]:
     elif global_args.pager:
         enable_pager()
 
+    # Handle version
+    if global_args.version:
+        version_str = ".".join(str(x) for x in __version__)
+        print(f"dulwich version {version_str}")
+        return 0
+
+    # Determine git_dir and work_tree from command line or environment
+    git_dir = global_args.git_dir or os.environ.get("GIT_DIR")
+    work_tree = global_args.work_tree or os.environ.get("GIT_WORK_TREE")
+
     # Handle help
     if global_args.help or not remaining:
         parser = argparse.ArgumentParser(
@@ -2888,6 +2933,9 @@ def main(argv=None) -> Optional[int]:
         )
         parser.add_argument("--no-pager", action="store_true", help="Disable pager")
         parser.add_argument("--pager", action="store_true", help="Force enable pager")
+        parser.add_argument("--version", action="store_true", help="Show version")
+        parser.add_argument("--git-dir", help="Set the path to the repository")
+        parser.add_argument("--work-tree", help="Set the path to the working tree")
         parser.add_argument(
             "command",
             nargs="?",
@@ -2906,7 +2954,7 @@ def main(argv=None) -> Optional[int]:
         print(f"No such subcommand: {cmd}")
         return 1
     # TODO(jelmer): Return non-0 on errors
-    return cmd_kls().run(cmd_args)
+    return cmd_kls(git_dir=git_dir, work_tree=work_tree).run(cmd_args)
 
 
 def _main() -> None:
