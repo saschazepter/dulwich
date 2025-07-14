@@ -39,6 +39,11 @@ from typing import (
 )
 
 try:
+    from typing import Self
+except ImportError:
+    from typing_extensions import Self
+
+try:
     from typing import TypeGuard  # type: ignore
 except ImportError:
     from typing_extensions import TypeGuard
@@ -538,7 +543,7 @@ class ShaFile:
         return obj
 
     @classmethod
-    def from_string(cls, string: bytes) -> "ShaFile":
+    def from_string(cls, string: bytes) -> Self:
         """Create a ShaFile from a string."""
         obj = cls()
         obj.set_raw_string(string)
