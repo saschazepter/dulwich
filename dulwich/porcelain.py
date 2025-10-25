@@ -6397,6 +6397,40 @@ def maintenance_run(
         return run_maintenance(r, tasks=tasks, auto=auto, progress=progress)
 
 
+def maintenance_register(repo: RepoPath) -> None:
+    """Register a repository for background maintenance.
+
+    This adds the repository to the global maintenance.repo config and sets
+    up recommended configuration for scheduled maintenance.
+
+    Args:
+      repo: Path to the repository
+    """
+    import os
+
+    from .maintenance import register_repository
+
+    repo_path = os.path.abspath(repo if isinstance(repo, str) else repo.path)
+    register_repository(repo_path)
+
+
+def maintenance_unregister(repo: RepoPath, force: bool = False) -> None:
+    """Unregister a repository from background maintenance.
+
+    This removes the repository from the global maintenance.repo config.
+
+    Args:
+      repo: Path to the repository
+      force: If True, don't error if repository is not registered
+    """
+    import os
+
+    from .maintenance import unregister_repository
+
+    repo_path = os.path.abspath(repo if isinstance(repo, str) else repo.path)
+    unregister_repository(repo_path, force=force)
+
+
 def count_objects(repo: RepoPath = ".", verbose: bool = False) -> CountObjectsResult:
     """Count unpacked objects and their disk usage.
 
