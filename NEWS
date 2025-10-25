@@ -8,6 +8,11 @@
    in CLI commands. When GIT_FLUSH=1, output is flushed after each write for
    real-time visibility. (Jelmer Vernooĳ, #1810)
 
+ * Add support for ``git maintenance`` command to optimize Git repository data.
+   Implements gc, commit-graph, loose-objects, incremental-repack, pack-refs, and
+   prefetch tasks. Supports automatic maintenance with ``--auto`` flag and task-specific
+   configuration. (Jelmer Vernooĳ)
+
 0.24.7	2025-10-23
 
  * Add sparse index support for improved performance with large repositories.
