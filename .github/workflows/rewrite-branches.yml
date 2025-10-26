@@ -1,0 +1,39 @@
+---
+name: Create 0.25-master branch
+
+"on":
+  push:
+    branches:
+      - '0.25'
+  workflow_dispatch:
+
+jobs:
+  create-0-25-master:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # Fetch all history
+
+      - name: Create 0.25-master branch
+        run: |
+          # Delete existing 0.25-master branch if present
+          if git show-ref --verify refs/heads/0.25-master; then
+            git branch -D 0.25-master
+          fi
+
+          # Find the shared ancestor of origin/main and origin/0.25
+          MERGE_BASE=$(git merge-base origin/main origin/0.25)
+          echo "Merge base: $MERGE_BASE"
+
+          # Rebase commits from merge-base..origin/0.25 onto origin/master
+          git rebase --onto origin/master $MERGE_BASE origin/0.25
+          git branch -M 0.25-master
+
+      - name: Push 0.25-master branch
+        run: |
+          git push origin 0.25-master --force

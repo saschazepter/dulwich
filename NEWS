@@ -1,3 +1,9 @@
+0.25.0	UNRELEASED
+
+ * Switch from 'master' → 'main' branch. At the same time,
+   rewrite history to exclude invalid objects (#620) and
+   fix an incorrect timestamp. (Jelmer Vernooĳ)
+
 0.24.8	UNRELEASED
 
  * Add support for namespace isolation via ``NamespacedRefsContainer``.
