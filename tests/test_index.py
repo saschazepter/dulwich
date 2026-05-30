@@ -2968,6 +2968,47 @@ class TestUpdateWorkingTree(TestCase):
         # Verify directory was removed
         self.assertFalse(os.path.exists(dir_path))
 
+    def test_update_working_tree_force_remove_untracked(self):
+        """force_remove_untracked removes files absent from the target tree."""
+        blob = Blob()
+        blob.data = b"tracked"
+        self.repo.object_store.add_object(blob)
+
+        tree1 = Tree()
+        tree1[b"tracked.txt"] = (0o100644, blob.id)
+        self.repo.object_store.add_object(tree1)
+
+        changes = tree_changes(self.repo.object_store, None, tree1.id)
+        update_working_tree(self.repo, None, tree1.id, change_iterator=changes)
+
+        # Create an untracked file and an untracked nested directory
+        untracked_path = os.path.join(self.tempdir, "untracked.txt")
+        with open(untracked_path, "wb") as f:
+            f.write(b"untracked")
+        nested_dir = os.path.join(self.tempdir, "sub")
+        os.mkdir(nested_dir)
+        nested_path = os.path.join(nested_dir, "nested.txt")
+        with open(nested_path, "wb") as f:
+            f.write(b"nested untracked")
+
+        # Re-apply the same tree with force_remove_untracked
+        changes = tree_changes(self.repo.object_store, tree1.id, tree1.id)
+        update_working_tree(
+            self.repo,
+            tree1.id,
+            tree1.id,
+            change_iterator=changes,
+            force_remove_untracked=True,
+        )
+
+        # Tracked file is kept; untracked file and its now-empty dir are gone
+        self.assertTrue(os.path.exists(os.path.join(self.tempdir, "tracked.txt")))
+        self.assertFalse(os.path.exists(untracked_path))
+        self.assertFalse(os.path.exists(nested_path))
+        self.assertFalse(os.path.exists(nested_dir))
+        self.assertNotIn(b"untracked.txt", self.repo.open_index())
+        self.assertNotIn(b"sub/nested.txt", self.repo.open_index())
+
     def test_update_working_tree_submodule_to_file(self):
         """Test replacing a submodule directory with a file."""
         # Create tree with submodule

@@ -2986,6 +2986,36 @@ def update_working_tree(
                     tree_encoding,
                 )
 
+    if force_remove_untracked:
+        # Remove any file in the working tree that is not present in the
+        # resulting index (i.e. not tracked by the target tree), then prune
+        # the empty directories left behind.
+        sep = os.fsencode(os.sep)
+        tracked_paths = set(index)
+        for root, dirs, files in os.walk(repo_path):
+            if b".git" in root.split(sep):
+                continue
+            for filename in files:
+                full_path = os.path.join(root, filename)
+                tree_path = os.path.relpath(full_path, repo_path)
+                if os.sep != "/":
+                    tree_path = tree_path.replace(sep, b"/")
+                if tree_path not in tracked_paths:
+                    _remove_file_with_readonly_handling(full_path)
+                    if tree_path in index:
+                        del index[tree_path]
+
+        for root, dirs, files in os.walk(repo_path, topdown=False):
+            if b".git" in root.split(sep) or root == repo_path or os.listdir(root):
+                continue
+            try:
+                os.rmdir(root)
+            except FileNotFoundError:
+                pass
+            except OSError as e:
+                if e.errno != errno.ENOTEMPTY:
+                    raise
+
     index.write()
 
 

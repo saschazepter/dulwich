@@ -8,6 +8,9 @@
    ``git~2`` even with ``core.protectNTFS=true``.
    (Jelmer Vernooĳ; reported by donovan-jasper)
 
+ * Restore ``force_remove_untracked`` handling in
+   ``index.update_working_tree``. (Jelmer Vernooĳ)
+
 1.2.5	2026-05-28
 
  * SECURITY(GHSA-gfhv-vqv2-4544): Validate submodule paths in
