@@ -19,6 +19,10 @@
    native git abort with ``unsupported ce_mode: 0``. The file mode is now
    derived from the work-tree file. (Jelmer Vernooĳ, #2218)
 
+ * Fix ``gc``/``repack`` on Windows raising ``PermissionError`` when
+   removing read-only pack files (as written by git). The read-only
+   attribute is now cleared before unlinking. (Jelmer Vernooĳ)
+
 1.2.6	2026-05-31
 
  * SECURITY: Honor ``core.protectNTFS``/``core.protectHFS`` on all
