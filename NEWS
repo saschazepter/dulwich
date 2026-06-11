@@ -32,6 +32,12 @@
    removing read-only pack files (as written by git). The read-only
    attribute is now cleared before unlinking. (Jelmer Vernooĳ)
 
+ * Discover packs named ``loose-<hash>.pack`` (as written by ``git
+   maintenance run --task=loose-objects``), not just ``pack-<hash>.pack``.
+   Objects living only in such a pack were previously invisible, and
+   reading them through a multi-pack-index raised ``AssertionError:
+   unexpected MIDX pack name``. (Jelmer Vernooĳ, #2229)
+
 1.2.6	2026-05-31
 
  * SECURITY: Honor ``core.protectNTFS``/``core.protectHFS`` on all
