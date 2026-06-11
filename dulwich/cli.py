@@ -87,7 +87,7 @@ from .errors import (
     GitProtocolError,
     NotGitRepository,
 )
-from .index import Index
+from .index import Index, InvalidPathError
 from .log_utils import _configure_logging_from_trace
 from .objects import Commit, ObjectID, RawObjectID, sha_to_hex, valid_hexsha
 from .objectspec import parse_commit_range
@@ -2072,7 +2072,7 @@ class cmd_init(Command):
 class cmd_clone(Command):
     """Clone a repository into a new directory."""
 
-    def run(self, args: Sequence[str]) -> None:
+    def run(self, args: Sequence[str]) -> int | None:
         """Execute the clone command.
 
         Args:
@@ -2132,6 +2132,11 @@ class cmd_clone(Command):
             )
         except GitProtocolError as e:
             logger.exception(e)
+        except InvalidPathError as e:
+            # The clone is kept; only the checkout failed, matching git.
+            logger.exception("unable to checkout working tree: %s", e)
+            return 1
+        return None
 
 
 def _get_commit_message_with_template(
