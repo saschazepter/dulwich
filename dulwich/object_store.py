@@ -2187,6 +2187,9 @@ class DiskObjectStore(PackBasedObjectStore):
             write_pack_index(
                 index_file, entries, pack_sha, version=self.pack_index_version
             )
+        if self.file_mode is not None:
+            # os.open() applies the umask, so set the shared mode explicitly.
+            os.chmod(target_index_path, self.file_mode)
 
         # Generate bitmap if configured and refs are available
         if self.pack_write_bitmaps and refs:
@@ -2386,6 +2389,9 @@ class DiskObjectStore(PackBasedObjectStore):
             f.write(
                 obj.as_legacy_object(compression_level=self.loose_compression_level)
             )
+        if self.file_mode is not None:
+            # os.open() applies the umask, so set the shared mode explicitly.
+            os.chmod(path, self.file_mode)
 
     @classmethod
     def init(

@@ -4,6 +4,13 @@
    ``get_reachability_provider``, which only guarded ``FileNotFoundError``.
    (Jelmer Vernooĳ, #2344)
 
+ * SECURITY: Apply ``core.sharedRepository`` masks the way git does, so that
+   named settings loosen the umask-derived mode rather than replacing it.
+   ``group`` and ``all`` previously chmodded directories to ``0o2777``
+   regardless of the umask, leaving ``.git/hooks`` and ``.git/refs``
+   world-writable under a conventional umask, so any local user could install
+   a hook or rewrite a ref. (netliomax25-code, Jelmer Vernooĳ, #2323)
+
  * Fix commit-graph extra edge indexing: the stored value is a position in a
    list of 4-byte entries, not a byte offset, so every octopus merge after
    the first got a wrong parent list. (netliomax25-code)

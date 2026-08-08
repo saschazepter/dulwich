@@ -1227,6 +1227,9 @@ class Index:
         except:
             f.close()
             raise
+        if self._file_mode is not None:
+            # os.open() applies the umask, so set the shared mode explicitly.
+            os.chmod(self._filename, self._file_mode)
 
     def read(self) -> None:
         """Read current contents of index from disk."""

@@ -21,6 +21,7 @@
 
 """Tests for the repository."""
 
+import builtins
 import errno
 import glob
 import importlib
@@ -33,6 +34,7 @@ import tempfile
 import time
 import warnings
 from pathlib import Path
+from unittest import mock
 
 from dulwich import errors, objects
 from dulwich.attrs import GitAttributes
@@ -48,6 +50,7 @@ from dulwich.repo import (
     Repo,
     UnsupportedExtension,
     UnsupportedVersion,
+    _current_umask,
     check_user_identity,
 )
 from dulwich.tests.utils import open_repo, setup_warning_catcher, tear_down_repo
@@ -2210,6 +2213,28 @@ class SharedRepositoryTests(TestCase):
         """Get the file mode bits (without file type bits)."""
         return stat.S_IMODE(os.stat(path).st_mode)
 
+    def test_current_umask(self):
+        """_current_umask reports the umask and leaves it unchanged."""
+        for value in (0o022, 0o077, 0o000, 0o007):
+            os.umask(value)
+            self.assertEqual(value, _current_umask())
+            # Reading it must not have disturbed it.
+            self.assertEqual(value, os.umask(value))
+
+    def test_current_umask_without_proc(self):
+        """_current_umask falls back to os.umask() when /proc is unavailable."""
+        real_open = builtins.open
+
+        def no_proc_open(path, *args, **kwargs):
+            if str(path) == "/proc/self/status":
+                raise FileNotFoundError("no /proc")
+            return real_open(path, *args, **kwargs)
+
+        with mock.patch.object(builtins, "open", no_proc_open):
+            for value in (0o022, 0o077, 0o000):
+                os.umask(value)
+                self.assertEqual(value, _current_umask())
+
     def _check_permissions(self, repo, expected_file_mode, expected_dir_mode):
         """Check that repository files and directories have expected permissions."""
         objects_dir = os.path.join(repo.commondir(), "objects")
@@ -2245,8 +2270,8 @@ class SharedRepositoryTests(TestCase):
         tmp_dir = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, tmp_dir)
 
-        # Set umask to 0 to see what permissions are actually set
-        os.umask(0)
+        # Use a conventional umask; git's shared masks only loosen it.
+        os.umask(0o022)
 
         repo = Repo.init_bare(tmp_dir, shared_repository="group")
         self.addCleanup(repo.close)
@@ -2268,11 +2293,65 @@ class SharedRepositoryTests(TestCase):
         repo = Repo.init_bare(tmp_dir, shared_repository="all")
         self.addCleanup(repo.close)
 
-        # Expected permissions for world sharing
+        # With umask 0 nothing strips the write bits, so "all" keeps them,
+        # matching git init --shared=all under the same umask.
         expected_dir_mode = 0o2777  # setgid + rwxrwxrwx
         expected_file_mode = 0o666  # rw-rw-rw-
 
         self._check_permissions(repo, expected_file_mode, expected_dir_mode)
+
+    def test_init_bare_shared_all_default_umask(self):
+        """sharedRepository=all grants others read but not write."""
+        tmp_dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp_dir)
+
+        os.umask(0o022)
+
+        repo = Repo.init_bare(tmp_dir, shared_repository="all")
+        self.addCleanup(repo.close)
+
+        # git init --shared=all under umask 022 produces these modes.
+        self._check_permissions(repo, 0o664, 0o2775)
+
+    def test_init_bare_shared_all_not_world_writable(self):
+        """sharedRepository=all must not leave the control dir world-writable."""
+        tmp_dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp_dir)
+
+        os.umask(0o022)
+
+        repo = Repo.init_bare(tmp_dir, shared_repository="all")
+        self.addCleanup(repo.close)
+
+        for name in ("hooks", "refs", "objects", "info"):
+            path = os.path.join(repo.commondir(), name)
+            mode = self._get_file_mode(path)
+            self.assertEqual(
+                0,
+                mode & stat.S_IWOTH,
+                f"{name} is world-writable: {oct(mode)}",
+            )
+
+    def test_shared_all_and_group_differ_under_restrictive_umask(self):
+        """Sharing with all grants others read where group sharing does not."""
+        os.umask(0o077)
+
+        all_dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, all_dir)
+        all_repo = Repo.init_bare(all_dir, shared_repository="all")
+        self.addCleanup(all_repo.close)
+
+        group_dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, group_dir)
+        group_repo = Repo.init_bare(group_dir, shared_repository="group")
+        self.addCleanup(group_repo.close)
+
+        self.assertEqual(
+            0o2775, self._get_file_mode(os.path.join(all_repo.commondir(), "refs"))
+        )
+        self.assertEqual(
+            0o2770, self._get_file_mode(os.path.join(group_repo.commondir(), "refs"))
+        )
 
     def test_init_bare_shared_umask(self):
         """Test initializing bare repo with sharedRepository=umask (default)."""
@@ -2296,8 +2375,8 @@ class SharedRepositoryTests(TestCase):
         tmp_dir = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, tmp_dir)
 
-        # Set umask to 0 to see what permissions are actually set
-        os.umask(0)
+        # Use a conventional umask; git's shared masks only loosen it.
+        os.umask(0o022)
 
         repo = Repo.init_bare(tmp_dir, shared_repository="group")
         self.addCleanup(repo.close)
@@ -2355,13 +2434,34 @@ class SharedRepositoryTests(TestCase):
             f"loose object mode: expected {oct(expected_mode)}, got {oct(actual_mode)}",
         )
 
+    def test_loose_object_not_world_writable(self):
+        """Loose objects are not world-writable under a default umask."""
+        tmp_dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp_dir)
+
+        os.umask(0o022)
+
+        repo = Repo.init_bare(tmp_dir, shared_repository="all")
+        self.addCleanup(repo.close)
+
+        blob = objects.Blob.from_string(b"test content")
+        repo.object_store.add_object(blob)
+
+        obj_path = repo.object_store._get_shafile_path(blob.id)
+        actual_mode = self._get_file_mode(obj_path)
+        self.assertEqual(
+            0o664,
+            actual_mode,
+            f"loose object mode: expected 0o664, got {oct(actual_mode)}",
+        )
+
     def test_pack_file_permissions_group(self):
         """Test that pack files get correct permissions with sharedRepository=group."""
         tmp_dir = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, tmp_dir)
 
-        # Set umask to 0 to see what permissions are actually set
-        os.umask(0)
+        # Use a conventional umask; git's shared masks only loosen it.
+        os.umask(0o022)
 
         repo = Repo.init_bare(tmp_dir, shared_repository="group")
         self.addCleanup(repo.close)
@@ -2392,8 +2492,8 @@ class SharedRepositoryTests(TestCase):
         tmp_dir = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, tmp_dir)
 
-        # Set umask to 0 to see what permissions are actually set
-        os.umask(0)
+        # Use a conventional umask; git's shared masks only loosen it.
+        os.umask(0o022)
 
         repo = Repo.init_bare(tmp_dir, shared_repository="group")
         self.addCleanup(repo.close)
@@ -2424,8 +2524,8 @@ class SharedRepositoryTests(TestCase):
         tmp_dir = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, tmp_dir)
 
-        # Set umask to 0 to see what permissions are actually set
-        os.umask(0)
+        # Use a conventional umask; git's shared masks only loosen it.
+        os.umask(0o022)
 
         # Create non-bare repo (index only exists in non-bare repos)
         repo = Repo.init(tmp_dir, shared_repository="group")
@@ -2455,8 +2555,8 @@ class SharedRepositoryTests(TestCase):
         tmp_dir = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, tmp_dir)
 
-        # Set umask to 0 to see what permissions are actually set
-        os.umask(0)
+        # Use a conventional umask; git's shared masks only loosen it.
+        os.umask(0o022)
 
         # Create repo with shared=group
         repo = Repo.init_bare(tmp_dir, shared_repository="group")
@@ -2484,8 +2584,8 @@ class SharedRepositoryTests(TestCase):
         tmp_dir = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, tmp_dir)
 
-        # Set umask to 0 to see what permissions are actually set
-        os.umask(0)
+        # Use a conventional umask; git's shared masks only loosen it.
+        os.umask(0o022)
 
         repo = Repo.init(tmp_dir, shared_repository="group")
         self.addCleanup(repo.close)

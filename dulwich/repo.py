@@ -385,6 +385,59 @@ def _set_filesystem_hidden(path: str) -> None:
     # Could implement other platform specific filesystem hiding here
 
 
+def _current_umask() -> int:
+    """Return the process umask.
+
+    Linux 4.7 and later expose the umask in /proc/self/status, which can be
+    read without disturbing it. Elsewhere the only way to read the umask is
+    to set it, so fall back to setting it to 0 and restoring it. That window
+    is not thread-safe: a concurrent file creation would use mode 0.
+
+    The result is deliberately not cached. Nothing notifies us when the umask
+    changes, and os.umask() is only one way to set it, so a stale value would
+    silently produce the wrong permissions.
+    """
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith("Umask:"):
+                    return int(line.split()[1], 8)
+    except FileNotFoundError:
+        pass
+
+    mask = os.umask(0)
+    os.umask(mask)
+    return mask
+
+
+def _shared_perm_masks(tweak: int, replace: bool) -> tuple[int, int]:
+    """Compute file and directory masks from a shared permission tweak.
+
+    Mirrors git's calc_shared_perm/adjust_shared_perm. Named settings such as
+    "group" and "all" loosen the umask-derived mode (replace=False), while an
+    explicit octal setting states the mode outright (replace=True).
+
+    Args:
+      tweak: Permission bits requested by core.sharedRepository
+      replace: Whether to replace the base mode rather than add to it
+
+    Returns:
+      tuple of (file_mask, directory_mask)
+    """
+    if replace:
+        file_mode = tweak
+    else:
+        file_mode = (0o666 & ~_current_umask()) | tweak
+
+    # Copy read bits to execute bits, and set setgid when group access is
+    # granted, as git does for directories.
+    dir_mode = file_mode | ((file_mode & 0o444) >> 2)
+    if dir_mode & 0o060:
+        dir_mode |= 0o2000
+
+    return (file_mode, dir_mode)
+
+
 def parse_shared_repository(
     value: str | bytes | bool,
 ) -> tuple[int | None, int | None]:
@@ -405,7 +458,7 @@ def parse_shared_repository(
     if isinstance(value, bool):
         if value:
             # true = group (same as "group")
-            return (0o664, 0o2775)
+            return _shared_perm_masks(0o660, replace=False)
         else:
             # false = umask (use system umask, no adjustment)
             return (None, None)
@@ -418,12 +471,11 @@ def parse_shared_repository(
         return (None, None)
 
     if value_lower in ("true", "1", "group"):
-        # Group writable (with setgid bit)
-        return (0o664, 0o2775)
+        return _shared_perm_masks(0o660, replace=False)
 
     if value_lower in ("all", "world", "everybody", "2"):
-        # World readable/writable (with setgid bit)
-        return (0o666, 0o2777)
+        # Others gain read, and execute on directories, but never write.
+        return _shared_perm_masks(0o664, replace=False)
 
     if value_lower == "umask":
         # Explicitly use umask
@@ -433,18 +485,10 @@ def parse_shared_repository(
     if value.startswith("0"):
         try:
             mode = int(value, 8)
-            # For directories, add execute bits where read bits are set
-            # and add setgid bit for shared repositories
-            dir_mode = mode | 0o2000  # Add setgid bit
-            if mode & 0o004:
-                dir_mode |= 0o001
-            if mode & 0o040:
-                dir_mode |= 0o010
-            if mode & 0o400:
-                dir_mode |= 0o100
-            return (mode, dir_mode)
         except ValueError:
             pass
+        else:
+            return _shared_perm_masks(mode, replace=True)
 
     # Default to umask for unrecognized values
     return (None, None)
@@ -1948,13 +1992,14 @@ class Repo(BaseRepo):
         file_mode, _ = self._get_shared_repository_permissions()
 
         # Create file with appropriate permissions
+        full_path = os.path.join(self.controldir(), path)
         if file_mode is not None:
-            with GitFile(
-                os.path.join(self.controldir(), path), "wb", mask=file_mode
-            ) as f:
+            with GitFile(full_path, "wb", mask=file_mode) as f:
                 f.write(contents)
+            # os.open() applies the umask, so set the shared mode explicitly.
+            os.chmod(full_path, file_mode)
         else:
-            with GitFile(os.path.join(self.controldir(), path), "wb") as f:
+            with GitFile(full_path, "wb") as f:
                 f.write(contents)
 
     def _del_named_file(self, path: str) -> None:
