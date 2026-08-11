@@ -1,5 +1,10 @@
 1.2.13	UNRELEASED
 
+ * Only reject reserved Windows device names (``aux``, ``nul``, ``con``, ...)
+   when actually running on Windows. C git confines this check to its Windows
+   compat layer, so repositories carrying such paths could not be cloned
+   elsewhere. (Jelmer Vernooĳ, #2351)
+
  * SECURITY: Don't follow symlinks when writing patch files in
    ``porcelain.format_patch``. A symlink pre-planted at a patch's filename in
    the output directory was followed, writing the patch outside that directory.
