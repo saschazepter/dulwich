@@ -1,5 +1,14 @@
 1.2.18	UNRELEASED
 
+ * Fix ``porcelain.reset`` with ``mode="hard"`` failing after a conflicted
+   merge. Like git, hard and mixed resets now remove merge state, and a
+   soft reset in the middle of a merge is refused.
+   (Jelmer Vernooĳ, #2461)
+
+ * Remove the index entry for a path deleted by ``update_working_tree``
+   even if the file was already missing from the working tree.
+   (Jelmer Vernooĳ)
+
  * Reject transfer URLs in LFS batch responses that are not ``http://`` or
    ``https://`` URLs. Previously a server could point uploads at e.g.
    ``file://`` URLs. (Yusufbek Anvarov, Jelmer Vernooĳ)

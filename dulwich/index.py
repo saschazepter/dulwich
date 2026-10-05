@@ -3033,6 +3033,11 @@ def _transition_to_absent(
     index: Index,
 ) -> None:
     """Remove any type of entry."""
+    try:
+        del index[path]
+    except KeyError:
+        pass
+
     if current_stat is None:
         return
 
@@ -3051,11 +3056,6 @@ def _transition_to_absent(
                     raise
     else:
         _remove_file_with_readonly_handling(full_path)
-
-    try:
-        del index[path]
-    except KeyError:
-        pass
 
     # Try to remove empty parent directories
     _remove_empty_parents(
